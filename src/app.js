@@ -181,10 +181,8 @@ app.get('/convert-to-h264', (req, res) => {
 
     ffmpeg()
       .input(originalFileData)
-      .inputFormat('h265') // Adjust this if the input format is different (e.g., 'h265' or 'hevc')
       .videoCodec('libx264') // Set the H.264 video codec
       .audioCodec('aac') // Set the AAC audio codec
-      .inputOptions(['-c:v hevc_nvenc']) // Use hardware-accelerated H.265 decoding if available (NVIDIA GPU)
       .outputOptions([
         '-crf 18', // Constant Rate Factor (18 is considered high quality)
         '-preset slow', // Use a slower preset for better quality
