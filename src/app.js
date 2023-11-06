@@ -22,6 +22,7 @@ const db = mysql.createPool({
 
 // AWS S3 configuration
 const s3 = new AWS.S3();
+const bucket = 'cschembri-project';
 
 // Middleware
 app.use(express.json());
@@ -31,7 +32,7 @@ app.use(bodyParser.json());
 const upload = multer({
   storage: multerS3({
     s3: s3,
-    bucket: 'cschembri-project',
+    bucket: bucket,
     metadata: function (req, file, cb) {
       cb(null, { fieldName: file.fieldname });
     },
@@ -86,60 +87,75 @@ async function loginUser(req, res) {
   }
 
   try {
-    const SELECT_QUERY = 'SELECT id, email, password FROM user WHERE email = ?';
-    const [results] = await db.execute(SELECT_QUERY, [email]);
-
-    if (results.length === 0) {
-      return res.status(401).json({ message: 'Authentication failed' });
-    }
-
-    const user = results[0];
-    const storedPasswordHash = user.password;
-
-    const match = await bcrypt.compare(password, storedPasswordHash);
-
-    if (match) {
+    if (authenticateUser(email, password)) {
       return res.status(200).json({ message: 'Login successful' });
-    } else {
-      return res.status(401).json({ message: 'Authentication failed' });
     }
+
+    return res.status(401).json({ message: 'Authentication failed' })
   } catch (err) {
     console.error('Error logging in user:', err);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
-async function authenticateUserAndUpload(req, res) {
-  if (!req.file) {
-    return res.status(400).json({ message: 'No file uploaded' });
-  }
-
-  return res.status(200).json({ message: 'File uploaded to S3 bucket successfully' });
-}
-
 async function authenticateUserAndGenerateKey(email, password, file, cb) {
   try {
-    const SELECT_QUERY = 'SELECT email, password FROM user WHERE email = ?';
-    const [results] = await db.execute(SELECT_QUERY, [email]);
-
-    if (results.length === 0) {
-      return cb(new Error('User not found'));
+    if (!authenticateUser(email, password)) {
+      return cb(new Error("Authentication failed"))
     }
 
-    const user = results[0];
-    const storedPasswordHash = user.password;
-    const match = await bcrypt.compare(password, storedPasswordHash);
-
-    if (!match) {
-      return cb(new Error('Authentication failed'));
-    }
-
-    const userEmail = user.email;
     const filename = file.originalname;
     const fileExt = file.originalname.split('.').pop();
-    const key = `${userEmail}/${filename}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
+    const key = `${email}/${filename}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
     cb(null, key);
   } catch (err) {
     cb(err);
   }
 }
+
+async function authenticateUser(email, password) {
+  const SELECT_QUERY = 'SELECT email, password FROM user WHERE email = ?';
+  const [results] = await db.execute(SELECT_QUERY, [email]);
+
+  if (results.length === 0) {
+    false;
+  }
+
+  const user = results[0];
+  const storedPasswordHash = user.password;
+  const match = await bcrypt.compare(password, storedPasswordHash);
+
+  if (!match) {
+    return false;
+  }
+
+  return true;
+}
+
+app.get('/files', async (req, res) => {
+  const { email, password } = req.query;
+
+  if (!authenticateUser(email, password)) {
+    return res.status(401).json({ message: 'Authentication failed' });
+  }
+
+  const s3Params = {
+    Bucket: bucket, // Replace with your S3 bucket name
+    Prefix: `${email}/`, // Prefix to filter objects belonging to the user
+  };
+
+  const s3 = new AWS.S3();
+
+  // List objects in the S3 bucket
+  s3.listObjectsV2(s3Params, (err, data) => {
+    if (err) {
+      console.error('Error listing S3 objects:', err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+
+    // Extract the object keys (filenames) from the result
+    const objectKeys = data.Contents.map((object) => object.Key);
+
+    return res.status(200).json({ files: objectKeys });
+  });
+});
