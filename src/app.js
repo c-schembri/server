@@ -51,6 +51,7 @@ app.listen(port, () => {
 
 // Routes
 app.get('/health', async (req, res) => {
+  console.log('Health!');
   return res.status(200);
 });
 
