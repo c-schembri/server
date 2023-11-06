@@ -218,6 +218,10 @@ async function authenticateUser(email, password) {
   }
 
   const user = results[0];
+  if (user === undefined || user === null) {
+    return false;
+  }
+
   const storedPasswordHash = user.password;
   const match = await bcrypt.compare(password, storedPasswordHash);
 
