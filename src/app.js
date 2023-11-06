@@ -158,6 +158,22 @@ app.get('/files', async (req, res) => {
   });
 });
 
+function saveToS3(key, data, callback) {
+  const params = {
+    Bucket: bucket, // Replace with your S3 bucket name
+    Key: key, // The object key (file name) in S3
+    Body: data, // The data to be saved
+  };
+
+  s3.putObject(params, (err) => {
+    if (err) {
+      callback(err);
+    } else {
+      callback(null);
+    }
+  });
+}
+
 app.get('/convert-to-h264', (req, res) => {
   const { email, password, filename } = req.query;
 
@@ -177,11 +193,7 @@ app.get('/convert-to-h264', (req, res) => {
     const tmpRaw = `/tmp/${Date.now()}_raw.mkv`
     fs.writeFileSync(tmpRaw, data.Body);
 
-    // Implement the H.264 conversion using FFmpeg
-    //const originalFileData = data.Body;
-
-    // Create a temporary file to store the converted data
-    const tempFile = `/tmp/${Date.now()}_converted.mkv`;
+    const tmpConverted = `/tmp/${Date.now()}_converted.mkv`;
 
     ffmpeg()
       .input(tmpRaw)
@@ -195,21 +207,22 @@ app.get('/convert-to-h264', (req, res) => {
       .toFormat('matroska')
       .on('end', () => {
         // Read the temporary file and save it back to S3
-        fs.readFile(tempFile, (readErr, convertedData) => {
+        fs.readFile(tmpConverted, (readErr, convertedData) => {
           if (readErr) {
             console.error('Error reading converted file:', readErr);
             return res.status(500).json({ message: 'Internal server error' });
           }
 
           // Save the converted data back to S3
-          saveToS3(sourceKey, convertedData, (saveErr) => {
+          saveToS3(key, convertedData, (saveErr) => {
             if (saveErr) {
               console.error('Error saving converted file to S3:', saveErr);
               return res.status(500).json({ message: 'Internal server error' });
             }
 
-            // Clean up the temporary file
-            fs.unlinkSync(tempFile);
+            // Clean up the temporary files
+            fs.unlinkSync(tmpRaw);
+            fs.unlinkSync(tmpConverted);
 
             return res.status(200).json({ message: 'Conversion and save to S3 successful' });
           });
@@ -219,6 +232,6 @@ app.get('/convert-to-h264', (req, res) => {
         console.error('FFmpeg conversion error:', err);
         return res.status(500).json({ message: 'Internal server error' });
       })
-      .save(tempFile);
+      .save(tmpConverted);
   });
 });
