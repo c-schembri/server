@@ -52,6 +52,36 @@ app.listen(port, async () => {
   //console.log("AWS functionality verified.")
 });
 
+// POST /register route
+app.post('/register', async (req, res) => {
+  const { email, password } = req.body;
+
+  // Check if email and password are provided
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  // Hash the password using bcrypt
+  bcrypt.hash(password, 10, (bcryptErr, hashedPassword) => {
+    if (bcryptErr) {
+      console.error('Error hashing the password:', bcryptErr);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+
+    const INSERT_QUERY = 'INSERT INTO users (email, password) VALUES (?, ?)';
+
+    // Insert user data into the database
+    db.query(INSERT_QUERY, [email, hashedPassword], (err, result) => {
+      if (err) {
+        console.error('Error inserting user data:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+      }
+
+      return res.status(201).json({ message: 'Registration successful' });
+    });
+  });
+});
+
 // POST /login route
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
