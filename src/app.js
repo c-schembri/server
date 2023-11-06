@@ -9,8 +9,10 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const ffmpeg = require('fluent-ffmpeg');
+const cors = require("cors");
 
 const app = express();
+app.use(cors());
 const port = 3001;
 
 // Database connection pool
