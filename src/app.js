@@ -134,7 +134,8 @@ app.get('/convert-to-h264', (req, res) => {
           }
 
           // Save the converted data back to S3
-          saveToS3(key, convertedData, (saveErr) => {
+          const newKey = 'h264-' + key;
+          saveToS3(newKey, convertedData, (saveErr) => {
             if (saveErr) {
               console.error('Error saving converted file to S3:', saveErr);
               return res.status(500).json({ message: 'Internal server error' });
