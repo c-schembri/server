@@ -27,6 +27,21 @@ const s3 = new AWS.S3();
 app.use(express.json());
 app.use(bodyParser.json());
 
+// File upload
+const upload = multer({
+  storage: multerS3({
+    s3: s3,
+    bucket: 'cschembri-project',
+    acl: 'public-read',
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: function (req, file, cb) {
+      authenticateUserAndGenerateKey(req.body.email, req.body.password, file, cb);
+    },
+  }),
+});
+
 // Start the server
 app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
@@ -94,22 +109,6 @@ async function loginUser(req, res) {
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
-
-// File upload
-const upload = multer({
-  storage: multerS3({
-    s3: s3,
-    bucket: 'cschembri-project',
-    acl: 'public-read',
-    metadata: function (req, file, cb) {
-      cb(null, { fieldName: file.fieldname });
-    },
-    key: function (req, file, cb) {
-      authenticateUserAndGenerateKey(req.body.email, req.body.password, file, cb);
-    },
-  }),
-});
-
 
 async function authenticateUserAndUpload(req, res) {
   if (!req.file) {
