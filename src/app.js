@@ -7,6 +7,7 @@ const multerS3 = require('multer-s3');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const ffmpeg = require('fluent-ffmpeg');
 
 const app = express();
 const port = 3001;
@@ -104,9 +105,7 @@ async function authenticateUserAndGenerateKey(email, password, file, cb) {
       return cb(new Error("Authentication failed"))
     }
 
-    const filename = file.originalname;
-    const fileExt = file.originalname.split('.').pop();
-    const key = `${email}/${filename}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
+    const key = `${email}/${Date.now()}-${Math.floor(Math.random() * 1000)}-${file.originalname}`;
     cb(null, key);
   } catch (err) {
     cb(err);
@@ -144,8 +143,6 @@ app.get('/files', async (req, res) => {
     Prefix: `${email}/`, // Prefix to filter objects belonging to the user
   };
 
-  const s3 = new AWS.S3();
-
   // List objects in the S3 bucket
   s3.listObjectsV2(s3Params, (err, data) => {
     if (err) {
@@ -157,5 +154,70 @@ app.get('/files', async (req, res) => {
     const objectKeys = data.Contents.map((object) => object.Key);
 
     return res.status(200).json({ files: objectKeys });
+  });
+});
+
+app.get('/convert-to-h264/:filename', (req, res) => {
+  const { email, password } = req.query;
+
+  if (!authenticateUser(email, password)) {
+    return res.status(401).json({ message: 'Authentication failed' });
+  }
+
+  const { filename } = req.params;
+  const sourceKey = filename; // Adjust this to your S3 object key
+
+  // Fetch the file from S3
+  s3.getObject({ Bucket: bucketName, Key: sourceKey }, (err, data) => {
+    if (err) {
+      console.error('Error fetching file from S3:', err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+
+    // Implement the H.264 conversion using FFmpeg
+    const originalFileData = data.Body;
+
+    // Create a temporary file to store the converted data
+    const tempFile = `/tmp/${Date.now()}_converted.mp4`;
+
+    ffmpeg()
+      .input(originalFileData)
+      .inputFormat('h265') // Adjust this if the input format is different (e.g., 'h265' or 'hevc')
+      .videoCodec('libx264') // Set the H.264 video codec
+      .audioCodec('aac') // Set the AAC audio codec
+      .inputOptions(['-c:v hevc_nvenc']) // Use hardware-accelerated H.265 decoding if available (NVIDIA GPU)
+      .outputOptions([
+        '-crf 18', // Constant Rate Factor (18 is considered high quality)
+        '-preset slow', // Use a slower preset for better quality
+        '-strict experimental', // Required for using the 'aac' audio codec
+      ])
+      .toFormat('mp4') // Set the output format to MP4
+      .on('end', () => {
+        // Read the temporary file and save it back to S3
+        fs.readFile(tempFile, (readErr, convertedData) => {
+          if (readErr) {
+            console.error('Error reading converted file:', readErr);
+            return res.status(500).json({ message: 'Internal server error' });
+          }
+
+          // Save the converted data back to S3
+          saveToS3(sourceKey, convertedData, (saveErr) => {
+            if (saveErr) {
+              console.error('Error saving converted file to S3:', saveErr);
+              return res.status(500).json({ message: 'Internal server error' });
+            }
+
+            // Clean up the temporary file
+            fs.unlinkSync(tempFile);
+
+            return res.status(200).json({ message: 'Conversion and save to S3 successful' });
+          });
+        });
+      })
+      .on('error', (err) => {
+        console.error('FFmpeg conversion error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+      })
+      .save(tempFile);
   });
 });
