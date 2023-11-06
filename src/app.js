@@ -192,7 +192,7 @@ app.get('/convert-to-h264', (req, res) => {
         '-preset slow', // Use a slower preset for better quality
         '-strict experimental', // Required for using the 'aac' audio codec
       ])
-      .toFormat('mkv')
+      .toFormat('matroska')
       .on('end', () => {
         // Read the temporary file and save it back to S3
         fs.readFile(tempFile, (readErr, convertedData) => {
