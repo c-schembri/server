@@ -2,11 +2,14 @@ require("dotenv").config();
 
 const express = require('express');
 const axios = require('axios');
-const { createS3Bucket, uploadJsonToS3, getObjectFromS3 } = require('./aws'); 
+const AWS = require('aws-sdk');
 const cors = require('cors');
 const mysql = require('mysql');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const fs = require('fs');
+const multer = require('multer');
+const multerS3 = require('multer-s3');
 
 const db = mysql.createPool({
   host: process.env.DB_HOST,
