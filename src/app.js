@@ -68,7 +68,7 @@ app.post('/register', async (req, res) => {
       return res.status(500).json({ message: 'Internal server error' });
     }
 
-    const INSERT_QUERY = 'INSERT INTO users (email, password) VALUES (?, ?)';
+    const INSERT_QUERY = 'INSERT INTO user (email, password) VALUES (?, ?)';
 
     // Insert user data into the database
     db.query(INSERT_QUERY, [email, hashedPassword], (err, result) => {
@@ -91,7 +91,7 @@ app.post('/login', async (req, res) => {
     return res.status(400).json({ message: 'Email and password are required' });
   }
 
-  const SELECT_QUERY = 'SELECT id, email, password FROM users WHERE email = ?';
+  const SELECT_QUERY = 'SELECT id, email, password FROM user WHERE email = ?';
 
   // Query the database to retrieve the user's information
   db.query(SELECT_QUERY, [email], (err, results) => {
