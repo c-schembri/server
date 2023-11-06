@@ -11,7 +11,7 @@ const bodyParser = require('body-parser');
 const ffmpeg = require('fluent-ffmpeg');
 
 const app = express();
-const port = 3001;
+const port = 80;
 
 // Database connection pool
 const db = mysql.createPool({
@@ -53,6 +53,32 @@ app.listen(port, () => {
 app.post('/register', registerUser);
 app.post('/login', loginUser);
 
+app.get('/files', async (req, res) => {
+  const { email, password } = req.query;
+
+  if (!authenticateUser(email, password)) {
+    return res.status(401).json({ message: 'Authentication failed' });
+  }
+
+  const s3Params = {
+    Bucket: bucket, // Replace with your S3 bucket name
+    Prefix: `${email}/`, // Prefix to filter objects belonging to the user
+  };
+
+  // List objects in the S3 bucket
+  s3.listObjectsV2(s3Params, (err, data) => {
+    if (err) {
+      console.error('Error listing S3 objects:', err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+
+    // Extract the object keys (filenames) from the result
+    const objectKeys = data.Contents.map((object) => object.Key);
+
+    return res.status(200).json({ files: objectKeys });
+  });
+});
+
 app.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'No file uploaded' });
@@ -60,6 +86,69 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
   return res.status(200).json({ message: 'File uploaded to S3 bucket successfully' });
 });
+
+app.get('/convert-to-h264', (req, res) => {
+  const { email, password, filename } = req.query;
+
+  if (!authenticateUser(email, password)) {
+    return res.status(401).json({ message: 'Authentication failed' });
+  }
+
+  const key = `${email}/${filename}`;
+
+  // Fetch the file from S3
+  s3.getObject({ Bucket: bucket, Key: key }, (err, data) => {
+    if (err) {
+      console.error('Error fetching file from S3:', err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+
+    const tmpRaw = `/tmp/${Date.now()}_raw.mkv`
+    fs.writeFileSync(tmpRaw, data.Body);
+
+    const tmpConverted = `/tmp/${Date.now()}_converted.mkv`;
+
+    ffmpeg()
+      .input(tmpRaw)
+      .videoCodec('libx264') // Set the H.264 video codec
+      .audioCodec('aac') // Set the AAC audio codec
+      .outputOptions([
+        '-crf 18', // Constant Rate Factor (18 is considered high quality)
+        '-preset slow', // Use a slower preset for better quality
+        '-strict experimental', // Required for using the 'aac' audio codec
+      ])
+      .toFormat('matroska')
+      .on('end', () => {
+        // Read the temporary file and save it back to S3
+        fs.readFile(tmpConverted, (readErr, convertedData) => {
+          if (readErr) {
+            console.error('Error reading converted file:', readErr);
+            return res.status(500).json({ message: 'Internal server error' });
+          }
+
+          // Save the converted data back to S3
+          saveToS3(key, convertedData, (saveErr) => {
+            if (saveErr) {
+              console.error('Error saving converted file to S3:', saveErr);
+              return res.status(500).json({ message: 'Internal server error' });
+            }
+
+            // Clean up the temporary files
+            fs.unlinkSync(tmpRaw);
+            fs.unlinkSync(tmpConverted);
+
+            return res.status(200).json({ message: 'Conversion and save to S3 successful' });
+          });
+        });
+      })
+      .on('error', (err) => {
+        console.error('FFmpeg conversion error:', err);
+        return res.status(500).json({ message: 'Internal server error' });
+      })
+      .save(tmpConverted);
+  });
+});
+
 
 // User registration
 async function registerUser(req, res) {
@@ -132,32 +221,6 @@ async function authenticateUser(email, password) {
   return true;
 }
 
-app.get('/files', async (req, res) => {
-  const { email, password } = req.query;
-
-  if (!authenticateUser(email, password)) {
-    return res.status(401).json({ message: 'Authentication failed' });
-  }
-
-  const s3Params = {
-    Bucket: bucket, // Replace with your S3 bucket name
-    Prefix: `${email}/`, // Prefix to filter objects belonging to the user
-  };
-
-  // List objects in the S3 bucket
-  s3.listObjectsV2(s3Params, (err, data) => {
-    if (err) {
-      console.error('Error listing S3 objects:', err);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-
-    // Extract the object keys (filenames) from the result
-    const objectKeys = data.Contents.map((object) => object.Key);
-
-    return res.status(200).json({ files: objectKeys });
-  });
-});
-
 function saveToS3(key, data, callback) {
   const params = {
     Bucket: bucket, // Replace with your S3 bucket name
@@ -173,65 +236,3 @@ function saveToS3(key, data, callback) {
     }
   });
 }
-
-app.get('/convert-to-h264', (req, res) => {
-  const { email, password, filename } = req.query;
-
-  if (!authenticateUser(email, password)) {
-    return res.status(401).json({ message: 'Authentication failed' });
-  }
-
-  const key = `${email}/${filename}`;
-
-  // Fetch the file from S3
-  s3.getObject({ Bucket: bucket, Key: key }, (err, data) => {
-    if (err) {
-      console.error('Error fetching file from S3:', err);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-
-    const tmpRaw = `/tmp/${Date.now()}_raw.mkv`
-    fs.writeFileSync(tmpRaw, data.Body);
-
-    const tmpConverted = `/tmp/${Date.now()}_converted.mkv`;
-
-    ffmpeg()
-      .input(tmpRaw)
-      .videoCodec('libx264') // Set the H.264 video codec
-      .audioCodec('aac') // Set the AAC audio codec
-      .outputOptions([
-        '-crf 18', // Constant Rate Factor (18 is considered high quality)
-        '-preset slow', // Use a slower preset for better quality
-        '-strict experimental', // Required for using the 'aac' audio codec
-      ])
-      .toFormat('matroska')
-      .on('end', () => {
-        // Read the temporary file and save it back to S3
-        fs.readFile(tmpConverted, (readErr, convertedData) => {
-          if (readErr) {
-            console.error('Error reading converted file:', readErr);
-            return res.status(500).json({ message: 'Internal server error' });
-          }
-
-          // Save the converted data back to S3
-          saveToS3(key, convertedData, (saveErr) => {
-            if (saveErr) {
-              console.error('Error saving converted file to S3:', saveErr);
-              return res.status(500).json({ message: 'Internal server error' });
-            }
-
-            // Clean up the temporary files
-            fs.unlinkSync(tmpRaw);
-            fs.unlinkSync(tmpConverted);
-
-            return res.status(200).json({ message: 'Conversion and save to S3 successful' });
-          });
-        });
-      })
-      .on('error', (err) => {
-        console.error('FFmpeg conversion error:', err);
-        return res.status(500).json({ message: 'Internal server error' });
-      })
-      .save(tmpConverted);
-  });
-});
