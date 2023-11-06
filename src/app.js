@@ -164,10 +164,10 @@ app.get('/convert-to-h264', (req, res) => {
     return res.status(401).json({ message: 'Authentication failed' });
   }
 
-  const sourceKey = filename; // Adjust this to your S3 object key
+  const key = `${email}/${filename}`;
 
   // Fetch the file from S3
-  s3.getObject({ Bucket: bucketName, Key: sourceKey }, (err, data) => {
+  s3.getObject({ Bucket: bucket, Key: key }, (err, data) => {
     if (err) {
       console.error('Error fetching file from S3:', err);
       return res.status(500).json({ message: 'Internal server error' });
