@@ -157,14 +157,13 @@ app.get('/files', async (req, res) => {
   });
 });
 
-app.get('/convert-to-h264/:filename', (req, res) => {
-  const { email, password } = req.query;
+app.get('/convert-to-h264', (req, res) => {
+  const { email, password, filename } = req.query;
 
   if (!authenticateUser(email, password)) {
     return res.status(401).json({ message: 'Authentication failed' });
   }
 
-  const { filename } = req.params;
   const sourceKey = filename; // Adjust this to your S3 object key
 
   // Fetch the file from S3
