@@ -50,6 +50,10 @@ app.listen(port, () => {
 });
 
 // Routes
+app.get('/health', async (req, res) => {
+  return res.status(200);
+});
+
 app.post('/register', registerUser);
 app.post('/login', loginUser);
 
