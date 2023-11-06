@@ -173,14 +173,17 @@ app.get('/convert-to-h264', (req, res) => {
       return res.status(500).json({ message: 'Internal server error' });
     }
 
+    const tmpRaw = `/tmp/${Date.now()}_raw.mkv`
+    fs.writeFileSync(tmpRaw, data.Body);
+
     // Implement the H.264 conversion using FFmpeg
-    const originalFileData = data.Body;
+    //const originalFileData = data.Body;
 
     // Create a temporary file to store the converted data
-    const tempFile = `/tmp/${Date.now()}_converted.mp4`;
+    const tempFile = `/tmp/${Date.now()}_converted.mkv`;
 
     ffmpeg()
-      .input(originalFileData)
+      .input(tmpRaw)
       .videoCodec('libx264') // Set the H.264 video codec
       .audioCodec('aac') // Set the AAC audio codec
       .outputOptions([
@@ -188,7 +191,7 @@ app.get('/convert-to-h264', (req, res) => {
         '-preset slow', // Use a slower preset for better quality
         '-strict experimental', // Required for using the 'aac' audio codec
       ])
-      .toFormat('mp4') // Set the output format to MP4
+      .toFormat('mkv')
       .on('end', () => {
         // Read the temporary file and save it back to S3
         fs.readFile(tempFile, (readErr, convertedData) => {
