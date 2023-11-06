@@ -11,7 +11,7 @@ const bodyParser = require('body-parser');
 const ffmpeg = require('fluent-ffmpeg');
 
 const app = express();
-const port = 80;
+const port = 3001;
 
 // Database connection pool
 const db = mysql.createPool({
