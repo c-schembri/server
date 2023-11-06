@@ -135,8 +135,9 @@ async function authenticateUserAndGenerateKey(email, password, file, cb) {
     }
 
     const userEmail = user.email;
+    const filename = file.originalname;
     const fileExt = file.originalname.split('.').pop();
-    const key = `${userEmail}/${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
+    const key = `${userEmail}/${filename}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
     cb(null, key);
   } catch (err) {
     cb(err);
