@@ -185,7 +185,8 @@ async function loginUser(req, res) {
   }
 
   try {
-    if (authenticateUser(email, password)) {
+    const authenticated = await authenticateUser(email, password);
+    if (authenticated) {
       return res.status(200).json({ message: 'Login successful' });
     }
 
@@ -198,7 +199,8 @@ async function loginUser(req, res) {
 
 async function authenticateUserAndGenerateKey(email, password, file, cb) {
   try {
-    if (!authenticateUser(email, password)) {
+    const authenticated = await authenticateUser(email, password);
+    if (!authenticated) {
       return cb(new Error("Authentication failed"))
     }
 
