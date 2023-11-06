@@ -35,7 +35,14 @@ app.listen(port, () => {
 // Routes
 app.post('/register', registerUser);
 app.post('/login', loginUser);
-app.post('/upload', authenticateUserAndUpload);
+
+app.post('/upload', upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No file uploaded' });
+  }
+
+  return res.status(200).json({ message: 'File uploaded to S3 bucket successfully' });
+});
 
 // User registration
 async function registerUser(req, res) {
@@ -102,6 +109,7 @@ const upload = multer({
     },
   }),
 });
+
 
 async function authenticateUserAndUpload(req, res) {
   if (!req.file) {
